@@ -46,6 +46,8 @@ pub use sp_runtime::{Perbill, Permill};
 /// Import the template pallet.
 pub use pallet_template;
 
+pub use pallet_samaritan;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
@@ -266,6 +268,18 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
+
+parameter_types! {             
+    // IPv6 is 39 characters
+    pub const MaxIPAddress: u32 = 40;
+}
+
+impl pallet_samaritan::Config for Runtime {
+    type Event = Event;
+	type TimeProvider = pallet_timestamp::Pallet<Runtime>;
+	type MaxIPAddress = MaxIPAddress;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -283,6 +297,7 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
+		Samaritan: pallet_samaritan::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
