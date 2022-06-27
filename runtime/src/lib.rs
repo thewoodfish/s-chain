@@ -268,16 +268,18 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
-
 parameter_types! {             
-    // IPv6 is 39 characters
     pub const MaxIPAddress: u32 = 40;
+	pub const MaxPseudoNameLength: u32 = 24;
+	pub const MaxCIDLength: u32 = 128;
 }
 
 impl pallet_samaritan::Config for Runtime {
     type Event = Event;
 	type TimeProvider = pallet_timestamp::Pallet<Runtime>;
 	type MaxIPAddress = MaxIPAddress;
+	type MaxPseudoNameLength = MaxPseudoNameLength;
+	type MaxCIDLength = MaxCIDLength;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
