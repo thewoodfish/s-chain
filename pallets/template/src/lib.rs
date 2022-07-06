@@ -1,222 +1,102 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+/// Edit this file to define custom logic or remove it if it is not needed.
+/// Learn more about FRAME and the core library of Substrate FRAME pallets:
+/// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
-#[frame_support::pallet] 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+#[frame_support::pallet]
 pub mod pallet {
-	use frame_support::dispatch::DispatchResult;
 	use frame_support::pallet_prelude::*;
-	use frame_system::{pallet_prelude::*}; 
-
-	use frame_support::traits::{tokens::ExistenceRequirement, Currency, UnixTime};
-	use frame_support::transactional;
-
-	#[cfg(feature = "std")]
-	use frame_support::serde::{Deserialize, Serialize};
-
-	use scale_info::prelude::vec::Vec;
-
-	// Handles our pallet's currency abstraction
-    type AccountOf<T> = <T as frame_system::Config>::AccountId;
-    // type BalanceOf<T> =
-    //     <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
-	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	#[scale_info(skip_type_params(T))]
-	#[codec(mel_bound())]
-	pub struct SignInDetail<T: Config> {
-		pub ip: BoundedVec<u8, T::MaxIPAddress>,
-		pub time: u64
-	}
-
-	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	#[scale_info(skip_type_params(T))]
-	#[codec(mel_bound())]
-	pub struct Samaritan<T: Config> {
-		pub pseudoname: BoundedVec<u8, T::MaxPseudoNameLength>,
-		pub cid: BoundedVec<u8, T::MaxCIDLength>
-	}
+	use frame_system::pallet_prelude::*;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-        // type Currency: Currency<Self::AccountId>;
-		type TimeProvider: UnixTime;
- 
-        #[pallet::constant]
-        type MaxIPAddress: Get<u32>;
-
-		#[pallet::constant]
-        type MaxPseudoNameLength: Get<u32>;
-
-		#[pallet::constant]
-        type MaxCIDLength: Get<u32>;
 	}
-
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
+	// The pallet's runtime storage items.
+	// https://docs.substrate.io/v3/runtime/storage
+	#[pallet::storage]
+	#[pallet::getter(fn something)]
+	// Learn more about declaring storage items:
+	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
+	pub type Something<T> = StorageValue<_, u32>;
+
+	// Pallets use events to inform users when important changes are made.
+	// https://docs.substrate.io/v3/runtime/events-and-errors
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// a Samaritan just signed in
-        SignIn(T::AccountId, u64, Vec<u8>),
-		/// a new Samaritan was just created
-		Created(T::AccountId, u64, Vec<u8>),
-		/// the Samaritan state has been modified
-		StateModified(T::AccountId, Vec<u8>),
-		/// update Samaritan details
-		UpdateSamaritan(T::AccountId, Vec<u8>, Vec<u8>)
+		/// Event documentation should end with an array that provides descriptive names for event
+		/// parameters. [something, who]
+		SomethingStored(u32, T::AccountId),
 	}
-
-	#[pallet::storage]
-    #[pallet::getter(fn sign_ins)]
-    pub(super) type SignIns<T: Config> = StorageMap< _, Twox64Concat, T::AccountId, SignInDetail<T>>;
-
-
-	#[pallet::storage]
-    #[pallet::getter(fn samaritan)]
-    pub(super) type SamPool<T: Config> = StorageMap< _, Twox64Concat, T::AccountId, Samaritan<T>>;
-
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Samaritan is not existent
-        SamaritanNotExist,
-
-		/// IP address length is more than normal
-		IPAddressOverflow,
-
-		/// CID address length is more than normal
-		CIDAddressOverflow,
-
-		/// Pseudoname length is more than normal
-		PseudoNameOverflow,
-		
+		/// Error names should be descriptive.
+		NoneValue,
+		/// Errors should have helpful documentation associated with them.
+		StorageOverflow,
 	}
 
+	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
+	// These functions materialize as "extrinsics", which are often compared to transactions.
+	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// record latest import/creation of Samaritan
-		#[pallet::weight(1000)]
-		pub fn sign_in(origin: OriginFor<T>, ip_addr: Vec<u8>) -> DispatchResult
-		{
-			// first check for if account id is present
-			let sender = ensure_signed(origin)?;
-			let user_id = sender.clone();
+		/// An example dispatchable that takes a singles value as a parameter, writes the value to
+		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
+			// Check that the extrinsic was signed and get the signer.
+			// This function will return an error if the extrinsic is not signed.
+			// https://docs.substrate.io/v3/runtime/origins
+			let who = ensure_signed(origin)?;
 
-			// check for overflow
-			let ip_address: BoundedVec<_, T::MaxIPAddress> =
-				ip_addr.clone().try_into().map_err(|()| Error::<T>::IPAddressOverflow)?;
+			// Update storage.
+			<Something<T>>::put(something);
 
-			// select user
-			let detail = SignIns::<T>::get(&user_id);
-
-			let mut now: u64 = 0;
-
-			if let Some(_sd) = detail {
-				now = Self::change_si(&user_id, &ip_address);
-			} else {
-				now = Self::new_si(&user_id, &ip_address);
-
-				// user was just created
-				Self::deposit_event(Event::Created(sender, now, ip_addr.clone()));
-			}
-
-            Self::deposit_event(Event::SignIn(user_id, now, ip_addr.clone()));
-
-			Ok(())
-
-		}
-	
-		#[pallet::weight(1000)]
-		pub fn change_detail(origin: OriginFor<T>, pseudo: Vec<u8>, cid: Vec<u8>) -> DispatchResult
-		{
-			let sender = ensure_signed(origin)?;
-
-			// check for overflow
-			let ncid: BoundedVec<_, T::MaxCIDLength> =
-				cid.clone().try_into().map_err(|()| Error::<T>::CIDAddressOverflow)?;
-
-			let psn: BoundedVec<_, T::MaxPseudoNameLength> =
-				cid.clone().try_into().map_err(|()| Error::<T>::PseudoNameOverflow)?;
-
-			// select samaritan
-			let sam = SamPool::<T>::get(&sender);
-
-			if let Some(_sam) = sam {
-				Self::update_sam(&sender, &psn, &ncid);
-			} else {
-				Self::new_sam(&sender, &psn, &ncid);
-			}
-
-            Self::deposit_event(Event::UpdateSamaritan(sender, pseudo, cid));
-
+			// Emit an event.
+			Self::deposit_event(Event::SomethingStored(something, who));
+			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
-	}
 
-	/// helper functions
-	impl<T: Config> Pallet<T> {
-		pub fn change_si(user_id: &T::AccountId, ip_address: &BoundedVec<u8, T::MaxIPAddress>) -> u64 {
-			let now: u64 = T::TimeProvider::now().as_secs();
+		/// An example dispatchable that may throw a custom error.
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
+		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
 
-			let nsd: SignInDetail<T> = SignInDetail {
-				ip: ip_address.clone(),
-				time: now
-			};
-
-			// update timestamp
-			SignIns::<T>::mutate(user_id, |det| {
-				*det = Some(nsd);
-			});
-
-			now
-		}
-
-		pub fn new_si(user_id: &T::AccountId, ip_address: &BoundedVec<u8, T::MaxIPAddress>) -> u64 {
-			let now: u64 = T::TimeProvider::now().as_secs();
-
-			let nsd: SignInDetail<T> = SignInDetail {
-				ip: ip_address.clone(),
-				time: now
-			};
-
-			// create new signin record and update timestamp 
-			SignIns::<T>::insert(user_id, nsd);
-
-			now
-		}
-
-		pub fn update_sam(user_id: &T::AccountId, ps: &BoundedVec<u8, T::MaxPseudoNameLength>, cid: &BoundedVec<u8, T::MaxCIDLength>) {
-
-			let sam: Samaritan<T> = Samaritan {
-				pseudoname: ps.clone(),
-				cid: cid.clone()
-			};
-
-			// update timestamp
-			SamPool::<T>::mutate(user_id, |det| {
-				*det = Some(sam);
-			});
-
-		}
-
-		pub fn new_sam(user_id: &T::AccountId, ps: &BoundedVec<u8, T::MaxPseudoNameLength>, cid: &BoundedVec<u8, T::MaxCIDLength>) {
-
-			let sam: Samaritan<T> = Samaritan {
-				pseudoname: ps.clone(),
-				cid: cid.clone()
-			};
-
-			// create new signin record and update timestamp 
-			SamPool::<T>::insert(user_id, sam);
-
+			// Read a value from storage.
+			match <Something<T>>::get() {
+				// Return an error if the value has not been set.
+				None => return Err(Error::<T>::NoneValue.into()),
+				Some(old) => {
+					// Increment the value read from storage; will error in the event of overflow.
+					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
+					// Update the value in storage with the incremented result.
+					<Something<T>>::put(new);
+					Ok(())
+				},
+			}
 		}
 	}
 }

@@ -37,6 +37,7 @@ pub use frame_support::{
 };
 pub use frame_system::Call as SystemCall;
 pub use pallet_balances::Call as BalancesCall;
+pub use pallet_collective::Call as CollectiveCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
 #[cfg(any(feature = "std", test))]
@@ -236,6 +237,24 @@ impl pallet_timestamp::Config for Runtime {
 	type WeightInfo = ();
 }
 
+parameter_types! {
+	pub const CouncilMotionDuration: BlockNumber = 5 * DAYS;
+	pub const CouncilMaxProposals: u32 = 100;
+	pub const CouncilMaxMembers: u32 = 100;
+}
+
+// type CouncilCollective = pallet_collective::Instance1;
+impl pallet_collective::Config for Runtime {
+	type Origin = Origin;
+	type Proposal = Call;
+	type Event = Event;
+	type MotionDuration = CouncilMotionDuration;
+	type MaxProposals = CouncilMaxProposals;
+	type MaxMembers = CouncilMaxMembers;
+	type DefaultVote = pallet_collective::PrimeDefaultVote;
+	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_balances::Config for Runtime {
 	type MaxLocks = ConstU32<50>;
 	type MaxReserves = ();
@@ -268,18 +287,37 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
-parameter_types! {             
-    pub const MaxIPAddress: u32 = 40;
+parameter_types! {
+	pub const MaxIPAddress: u32 = 40;
 	pub const MaxPseudoNameLength: u32 = 24;
 	pub const MaxCIDLength: u32 = 128;
 }
 
+type CouncilCollective = ();
+
 impl pallet_samaritan::Config for Runtime {
-    type Event = Event;
+	type Event = Event;
 	type TimeProvider = pallet_timestamp::Pallet<Runtime>;
 	type MaxIPAddress = MaxIPAddress;
 	type MaxPseudoNameLength = MaxPseudoNameLength;
 	type MaxCIDLength = MaxCIDLength;
+}
+
+parameter_types! {
+	pub const MaxAppNameLength: u32 = 32;
+	pub const MaxAppCIDLength: u32 = 128;
+	pub const MaxPermissionsLength: u32 = 128;
+	pub const MaxMembers: u32 = 3;
+}
+
+impl pallet_ability::Config for Runtime {
+	type Event = Event;
+	type MaxAppNameLength = MaxAppNameLength;
+	type MaxAppCIDLength = MaxAppCIDLength;
+	type MaxPermissionsLength = MaxPermissionsLength;
+	type CustomOrigin =
+		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilCollective, 2, 3>;
+	type MaxMembers = MaxMembers;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -292,6 +330,7 @@ construct_runtime!(
 		System: frame_system,
 		RandomnessCollectiveFlip: pallet_randomness_collective_flip,
 		Timestamp: pallet_timestamp,
+		// Collective: pallet_collective,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
 		Balances: pallet_balances,
@@ -300,6 +339,7 @@ construct_runtime!(
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
 		Samaritan: pallet_samaritan::{Pallet, Call, Storage, Event<T>},
+		Ability: pallet_ability::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
