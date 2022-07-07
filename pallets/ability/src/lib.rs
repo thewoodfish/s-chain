@@ -168,7 +168,7 @@ pub mod pallet {
 
 			let mut members = self.members.clone();
 			members.sort();
-			T::MembershipInitialized::initialize_members(&members);
+			// T::MembershipInitialized::initialize_members(&members);
 
 			let genesis_members: BoundedVec<T::AccountId, T::MaxMembers> =
 				self.members.clone().try_into().expect("Too many genesis members");
