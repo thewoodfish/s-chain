@@ -33,6 +33,14 @@ pub mod pallet {
 		pub nays: u32,
 	}
 
+	#[derive(Default, Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[scale_info(skip_type_params(T))]
+	#[codec(mel_bound())]
+	pub struct AVStatus<T: Config> {
+		pub block_number: T::BlockNumber,
+		pub passed: bool,
+	}
+
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -79,7 +87,7 @@ pub mod pallet {
 
 	/// The current membership, stored as an ordered Vec.
 	#[pallet::storage]
-	#[pallet::getter(fn members)]
+	#[pallet::getter(fn vmembers)]
 	pub type Members<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, T::MaxMembers>, ValueQuery>;
 
@@ -111,6 +119,12 @@ pub mod pallet {
 	#[pallet::getter(fn app_count)]
 	pub type AppsCount<T: Config> = StorageValue<_, u32>;
 
+	/// storage for verified apps, whether they passed or not
+	#[pallet::storage]
+	#[pallet::getter(fn members)]
+	pub(super) type StatusQueue<T: Config> =
+		StorageMap<_, Twox64Concat, BoundedVec<u8, T::MaxAppCIDLength>, AVStatus<T>>;
+
 	// 	fn array_to_vec<T: Config>(arr: &[T::AccountId]) -> Vec<T::AccountId> {
 	// 		let mut vector = Vec::new();
 	// 		for i in arr.iter() {
@@ -131,7 +145,7 @@ pub mod pallet {
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
-		pub members: BoundedVec<T::AccountId, T::MaxMembers>,
+		pub members: Vec<T::AccountId>
 	}
 
 	#[cfg(feature = "std")]
@@ -155,7 +169,16 @@ pub mod pallet {
 			let mut members = self.members.clone();
 			members.sort();
 			T::MembershipInitialized::initialize_members(&members);
-			Members::<T>::put(members);
+
+			// loop through Vec and push into BoundedVec
+			let mut new_members: BoundedVec<T::AccountId, T::MaxMembers>;
+			
+			for id in members {
+				new_members.try_push(id);
+			}
+
+			Members::<T>::put(new_members);
+
 		}
 	}
 
@@ -333,6 +356,7 @@ pub mod pallet {
 		) -> Result<(), Error<T>> {
 			// make sure its only the authorized members
 			// T::VerifyOrigin::ensure_origin(origin)?;
+			let mut passed = false;
 
 			if ayes > nays {
 				// select app from tempPool
@@ -354,8 +378,16 @@ pub mod pallet {
 					None => AppsCount::<T>::put(1),
 				}
 
+				passed = true;
+
 				Self::deposit_event(Event::AddedToAbilityPool(cid.to_vec().clone()));
 			}
+
+			// // construct final struct
+			// let fv: AVStatus<T> = AVStatus { block_number: System::block_number(), passed };
+
+			// // record verdict for app status query
+			// StatusQueue::<T>::insert(cid.clone(), fv);
 
 			// remove from temporary pool
 			TempPool::<T>::remove(cid);
