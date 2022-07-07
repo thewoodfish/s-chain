@@ -344,7 +344,7 @@ construct_runtime!(
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
 		Samaritan: pallet_samaritan::{Pallet, Call, Storage, Event<T>},
-		Ability: pallet_ability::{Pallet, Call, Storage, Event<T>},
+		Ability: pallet_ability
 	}
 );
 

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, AbilityConfig,
+	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, AbilityConfig, TechnicalCommitteeConfig,
 	Signature, SudoConfig, SystemConfig, WASM_BINARY,
 };
 use sc_service::ChainType;
@@ -148,6 +148,8 @@ fn testnet_genesis(
 		get_account_id_from_seed::<sr25519::Public>("Charlie"),
 	];
 
+	let num_endowed_accounts = endowed_accounts.len();
+
 	GenesisConfig {
 		system: SystemConfig {
 			// Add Wasm runtime to storage.
@@ -168,10 +170,16 @@ fn testnet_genesis(
 			key: Some(root_key),
 		},
 		transaction_payment: Default::default(),
-
 		ability: AbilityConfig {
-			phantom: Default::default(),
 			members: accounts_to_map.iter().cloned().map(|x| x).collect(),
+		},
+		technical_committee: TechnicalCommitteeConfig {
+			members: endowed_accounts
+				.iter()
+				.take((num_endowed_accounts + 1) / 2)
+				.cloned()
+				.collect(),
+			phantom: Default::default(),
 		},
 	}
 }
