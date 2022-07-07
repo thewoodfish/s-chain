@@ -9,27 +9,16 @@ pub mod pallet {
 
 	use frame_support::dispatch::DispatchResult;
 	use frame_support::traits::{
-		ChangeMembers, Contains, EnsureOrigin, Get, InitializeMembers, SortedMembers,
+		Contains, EnsureOrigin, Get, InitializeMembers,
 	};
-
-	pub type MemberCount = u32;
-	pub type Member3Count = u32;
 
 	#[cfg(feature = "std")]
 	use frame_support::serde::{Deserialize, Serialize};
 
 	use scale_info::prelude::vec::Vec;
+	use sp_std::vec;
 
-	/// Origin for the ability module.
-	#[derive(PartialEq, Eq, Clone, RuntimeDebug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-	#[scale_info(skip_type_params(I))]
-	#[codec(mel_bound(AccountId: MaxEncodedLen))]
-	pub enum RawOrigin<AccountId> {
-		Members(MemberCount, MemberCount),
-		Member(AccountId),
-	}
-
-	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Default, Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	#[codec(mel_bound())]
 	pub struct SamApp<T: Config> {
@@ -38,14 +27,14 @@ pub mod pallet {
 		pub permissions: BoundedVec<u8, T::MaxPermissionsLength>,
 	}
 
-	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Default, Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	#[codec(mel_bound())]
 	pub struct Reviews {
 		pub ayes: u32,
 		pub nays: u32,
 	}
-
+	
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -53,12 +42,12 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
 		/// Origin allowed to verify apps
-		type VerifyOrigin: EnsureOrigin<Self::Origin>;
+		// type VerifyOrigin: EnsureOrigin<Self::Origin>;
 
 		type MembershipInitialized: InitializeMembers<Self::AccountId>;
 
 		/// The receiver of the signal for when the membership has changed.
-		type MembershipChanged: ChangeMembers<Self::AccountId>;
+		// type MembershipChanged: ChangeMembers<Self::AccountId>;
 
 		#[pallet::constant]
 		type MaxAppNameLength: Get<u32>;
@@ -124,16 +113,33 @@ pub mod pallet {
 	#[pallet::getter(fn app_count)]
 	pub type AppsCount<T: Config> = StorageValue<_, u32>;
 
+// 	fn array_to_vec<T: Config>(arr: &[T::AccountId]) -> Vec<T::AccountId> {
+// 		let mut vector = Vec::new();
+// 		for i in arr.iter() {
+// 			vector.push(*i);
+// 		}
+
+// 		vector
+//    }
+
+	// impl<T: Config> InitializeMembers<T::AccountId> for Pallet<T> {
+	// 	fn initialize_members(mbs: &[T::AccountId]) {
+	// 		if !members.is_empty() {
+	// 			assert!(Members::<T>::get().is_empty(), "Members are already initialized!");
+	// 			Members::<T>::put(members);
+	// 		}
+	// 	}
+	// }
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub members: BoundedVec<T::AccountId, T::MaxMembers>,
-		pub phantom: PhantomData<T>,
 	}
 
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { members: Default::default(), phantom: Default::default() }
+			Self { members: Default::default() }
 		}
 	}
 
@@ -142,7 +148,6 @@ pub mod pallet {
 		fn build(&self) {
 			use sp_std::collections::btree_set::BTreeSet;
 			let members_set: BTreeSet<_> = self.members.iter().collect();
-
 			assert_eq!(
 				members_set.len(),
 				self.members.len(),
@@ -151,7 +156,6 @@ pub mod pallet {
 
 			let mut members = self.members.clone();
 			members.sort();
-
 			T::MembershipInitialized::initialize_members(&members);
 			Members::<T>::put(members);
 		}
@@ -184,8 +188,11 @@ pub mod pallet {
 		/// Not a verifier
 		NotAVerifier,
 
-		// Maximum verifier reached
+		/// Maximum verifier reached
 		MaxVerifierReached,
+
+		/// Too many members
+		MembersOverflow
 	}
 
 	#[pallet::call]
@@ -213,7 +220,7 @@ pub mod pallet {
 			Self::add_ability(&sender, &app_n, &a_cid, &a_perms);
 
 			// register for review
-			Self::add_review(&cid);
+			Self::add_review(&a_cid);
 
 			Self::deposit_event(Event::AppSubmitted(sender, app_name, cid, perms));
 
@@ -235,14 +242,17 @@ pub mod pallet {
 
 			let vstatus = AppVQueue::<T>::get(&cid);
 
+			// unwrapped version
+			let mut vs_unwrapped = vstatus.clone().unwrap_or_default();
+
 			if vstatus != None {
 				// make sure there is no duplicate votes
 				let _dv =
-					vstatus.binary_search(&verifier).err().ok_or(Error::<T>::VoteAlreadyCast)?;
+					vs_unwrapped.binary_search(&verifier).err().ok_or(Error::<T>::VoteAlreadyCast)?;
 			}
 
 			// get review queue
-			let mut rev = RevQueue::<T>::get(&cid).unwrap_or(Error::<T>::ReviewsNotFound);
+			let mut rev = RevQueue::<T>::get(&cid).unwrap_or_default();
 
 			// cast vote
 			if verdict == true {
@@ -265,67 +275,26 @@ pub mod pallet {
 			// update the app verification status
 			if vstatus == None {
 				// if first verifier
+				let first_v =  vec![verifier];
+				let vs: BoundedVec<_, T::MaxMembers> = 
+					first_v.clone().try_into().map_err(|()| Error::<T>::MembersOverflow)?;
 
-				let vs: BoundedVec<_, T::MaxMembers> = vec![verifier];
 				AppVQueue::<T>::insert(cid.clone(), vs);
 			} else {
 				// append new member
-				vstatus.try_push(verifier).ok_or(Error::<T>::MaxVerifierReached);
-				vstatus.sort();
+				vs_unwrapped.try_push(verifier);
+				vs_unwrapped.sort();
 
 				// commit to memory
 				AppVQueue::<T>::mutate(&cid, |vf| {
-					*vf = Some(vstatus);
+					*vf = Some(vs_unwrapped);
 				});
 			}
 
 			// check if it's time for verdict
-			if rev_final.ayes + rev_final.nays == T::MaxMembers {
-				Self::give_app_verdict(&cid, rev_final.ayes, rev_final.nays);
+			if rev_final.ayes + rev_final.nays == T::MaxMembers::get() {
+				Self::give_app_verdict(&cid, rev_final.ayes, rev_final.nays)?;
 			}
-
-			Ok(())
-		}
-
-		#[pallet::weight(1000)]
-		pub fn give_app_verdict(
-			origin: OriginFor<T>,
-			cid: &BoundedVec<u8, T::MaxAppCIDLength>,
-			ayes: u32,
-			nays: u32,
-		) -> DispatchResult {
-			// make sure its only the authorized members
-			T::VerifyOrigin::ensure_origin(origin)?;
-
-			if ayes > nays {
-				// select app from tempPool
-				let app = TempPool::<T>::get(cid).ok_or(<Error<T>>::AppDoesNotExist);
-
-				// insert into ability pool, make sure it hasn't been added before
-				ensure!(AbilityPool::<T>::get(cid) == None, Error::<T>::AppExistsInPool);
-
-				// insert into pool
-				AbilityPool::<T>::insert(cid.clone(), app.clone());
-
-				// increase total app count
-				match AppsCount::<T>::get() {
-					Some(count) => AppsCount::<T>::put(count + 1),
-					None => AppsCount::<T>::put(1),
-				}
-
-				Self::deposit_event(Event::AddedToAbilityPool(cid.to_vec().clone()));
-			}
-
-			// remove from temporary pool
-			TempPool::<T>::remove(cid);
-
-			// remove review record
-			RevQueue::<T>::remove(cid);
-
-			// remove from app verification queue
-			AppVQueue::<T>::remove(cid);
-
-			Self::deposit_event(Event::AppReviewConcluded(cid.to_vec().clone(), ayes, nays));
 
 			Ok(())
 		}
@@ -355,6 +324,51 @@ pub mod pallet {
 			let rev: Reviews = Reviews { ayes: 0, nays: 0 };
 
 			RevQueue::<T>::insert(cid.clone(), rev);
+		}
+
+		pub fn give_app_verdict(
+			cid: &BoundedVec<u8, T::MaxAppCIDLength>,
+			ayes: u32,
+			nays: u32,
+		) -> Result<(), Error<T>> {
+			// make sure its only the authorized members
+			// T::VerifyOrigin::ensure_origin(origin)?;
+
+			if ayes > nays {
+				// select app from tempPool
+				let app = TempPool::<T>::get(cid).ok_or(<Error<T>>::AppDoesNotExist);
+				let app_new = app.unwrap();
+
+				// insert into ability pool, make sure it hasn't been added before
+				if let None = AbilityPool::<T>::get(cid) {
+					// throw error
+					ensure!(true == false, Error::<T>::AppExistsInPool)
+				}
+
+				// insert into pool
+				AbilityPool::<T>::insert(cid.clone(), app_new);
+
+				// increase total app count
+				match AppsCount::<T>::get() {
+					Some(count) => AppsCount::<T>::put(count + 1),
+					None => AppsCount::<T>::put(1),
+				}
+
+				Self::deposit_event(Event::AddedToAbilityPool(cid.to_vec().clone()));
+			}
+
+			// remove from temporary pool
+			TempPool::<T>::remove(cid);
+
+			// remove review record
+			RevQueue::<T>::remove(cid);
+
+			// remove from app verification queue
+			AppVQueue::<T>::remove(cid);
+
+			Self::deposit_event(Event::AppReviewConcluded(cid.to_vec().clone(), ayes, nays));
+
+			Ok(())
 		}
 	}
 }

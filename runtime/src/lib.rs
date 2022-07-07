@@ -243,17 +243,6 @@ parameter_types! {
 	pub const CouncilMaxMembers: u32 = 100;
 }
 
-// type CouncilCollective = pallet_collective::Instance1;
-impl pallet_collective::Config for Runtime {
-	type Origin = Origin;
-	type Proposal = Call;
-	type Event = Event;
-	type MotionDuration = CouncilMotionDuration;
-	type MaxProposals = CouncilMaxProposals;
-	type MaxMembers = CouncilMaxMembers;
-	type DefaultVote = pallet_collective::PrimeDefaultVote;
-	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
-}
 
 impl pallet_balances::Config for Runtime {
 	type MaxLocks = ConstU32<50>;
@@ -288,12 +277,28 @@ impl pallet_template::Config for Runtime {
 }
 
 parameter_types! {
+	pub const TechnicalMotionDuration: BlockNumber = 5 * DAYS;
+	pub const TechnicalMaxProposals: u32 = 100;
+	pub const TechnicalMaxMembers: u32 = 100;
+}
+
+type TechnicalCollective = pallet_collective::Instance1;
+impl pallet_collective::Config<TechnicalCollective> for Runtime {
+	type Origin = Origin;
+	type Proposal = Call;
+	type Event = Event;
+	type MotionDuration = TechnicalMotionDuration;
+	type MaxProposals = TechnicalMaxProposals;
+	type MaxMembers = TechnicalMaxMembers;
+	type DefaultVote = pallet_collective::PrimeDefaultVote;
+	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
 	pub const MaxIPAddress: u32 = 40;
 	pub const MaxPseudoNameLength: u32 = 24;
 	pub const MaxCIDLength: u32 = 128;
 }
-
-type CouncilCollective = ();
 
 impl pallet_samaritan::Config for Runtime {
 	type Event = Event;
@@ -315,9 +320,10 @@ impl pallet_ability::Config for Runtime {
 	type MaxAppNameLength = MaxAppNameLength;
 	type MaxAppCIDLength = MaxAppCIDLength;
 	type MaxPermissionsLength = MaxPermissionsLength;
-	type CustomOrigin =
-		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilCollective, 2, 3>;
+	// type CustomOrigin =
+	// 	pallet_collective::EnsureProportionAtLeast<AccountId, CouncilCollective, 2, 3>;
 	type MaxMembers = MaxMembers;
+	type MembershipInitialized = TechnicalCommittee;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -330,7 +336,7 @@ construct_runtime!(
 		System: frame_system,
 		RandomnessCollectiveFlip: pallet_randomness_collective_flip,
 		Timestamp: pallet_timestamp,
-		// Collective: pallet_collective,
+		TechnicalCommittee: pallet_collective::<Instance1>,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
 		Balances: pallet_balances,

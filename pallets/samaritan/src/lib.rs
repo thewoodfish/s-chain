@@ -21,6 +21,7 @@ pub mod pallet {
 	// type BalanceOf<T> =
 	//     <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
+
 	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	#[codec(mel_bound())]
