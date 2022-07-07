@@ -8,9 +8,7 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 
 	use frame_support::dispatch::DispatchResult;
-	use frame_support::traits::{
-		Contains, EnsureOrigin, Get, InitializeMembers,
-	};
+	use frame_support::traits::{Contains, EnsureOrigin, Get, InitializeMembers};
 
 	#[cfg(feature = "std")]
 	use frame_support::serde::{Deserialize, Serialize};
@@ -34,7 +32,7 @@ pub mod pallet {
 		pub ayes: u32,
 		pub nays: u32,
 	}
-	
+
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -113,14 +111,14 @@ pub mod pallet {
 	#[pallet::getter(fn app_count)]
 	pub type AppsCount<T: Config> = StorageValue<_, u32>;
 
-// 	fn array_to_vec<T: Config>(arr: &[T::AccountId]) -> Vec<T::AccountId> {
-// 		let mut vector = Vec::new();
-// 		for i in arr.iter() {
-// 			vector.push(*i);
-// 		}
+	// 	fn array_to_vec<T: Config>(arr: &[T::AccountId]) -> Vec<T::AccountId> {
+	// 		let mut vector = Vec::new();
+	// 		for i in arr.iter() {
+	// 			vector.push(*i);
+	// 		}
 
-// 		vector
-//    }
+	// 		vector
+	//    }
 
 	// impl<T: Config> InitializeMembers<T::AccountId> for Pallet<T> {
 	// 	fn initialize_members(mbs: &[T::AccountId]) {
@@ -192,7 +190,7 @@ pub mod pallet {
 		MaxVerifierReached,
 
 		/// Too many members
-		MembersOverflow
+		MembersOverflow,
 	}
 
 	#[pallet::call]
@@ -247,8 +245,10 @@ pub mod pallet {
 
 			if vstatus != None {
 				// make sure there is no duplicate votes
-				let _dv =
-					vs_unwrapped.binary_search(&verifier).err().ok_or(Error::<T>::VoteAlreadyCast)?;
+				let _dv = vs_unwrapped
+					.binary_search(&verifier)
+					.err()
+					.ok_or(Error::<T>::VoteAlreadyCast)?;
 			}
 
 			// get review queue
@@ -275,8 +275,8 @@ pub mod pallet {
 			// update the app verification status
 			if vstatus == None {
 				// if first verifier
-				let first_v =  vec![verifier];
-				let vs: BoundedVec<_, T::MaxMembers> = 
+				let first_v = vec![verifier];
+				let vs: BoundedVec<_, T::MaxMembers> =
 					first_v.clone().try_into().map_err(|()| Error::<T>::MembersOverflow)?;
 
 				AppVQueue::<T>::insert(cid.clone(), vs);

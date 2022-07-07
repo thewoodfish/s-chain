@@ -243,7 +243,6 @@ parameter_types! {
 	pub const CouncilMaxMembers: u32 = 100;
 }
 
-
 impl pallet_balances::Config for Runtime {
 	type MaxLocks = ConstU32<50>;
 	type MaxReserves = ();
