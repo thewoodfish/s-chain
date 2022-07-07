@@ -87,7 +87,7 @@ pub mod pallet {
 
 	/// The current membership, stored as an ordered Vec.
 	#[pallet::storage]
-	#[pallet::getter(fn vmembers)]
+	#[pallet::getter(fn members)]
 	pub type Members<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, T::MaxMembers>, ValueQuery>;
 
@@ -121,7 +121,7 @@ pub mod pallet {
 
 	/// storage for verified apps, whether they passed or not
 	#[pallet::storage]
-	#[pallet::getter(fn members)]
+	#[pallet::getter(fn stats)]
 	pub(super) type StatusQueue<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedVec<u8, T::MaxAppCIDLength>, AVStatus<T>>;
 
@@ -145,13 +145,13 @@ pub mod pallet {
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
-		pub members: Vec<T::AccountId>
+		pub members: Vec<T::AccountId>,
 	}
 
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { members: Default::default() }
+			Self { members: Vec::new() }
 		}
 	}
 
@@ -170,15 +170,9 @@ pub mod pallet {
 			members.sort();
 			T::MembershipInitialized::initialize_members(&members);
 
-			// loop through Vec and push into BoundedVec
-			let mut new_members: BoundedVec<T::AccountId, T::MaxMembers>;
-			
-			for id in members {
-				new_members.try_push(id);
-			}
-
-			Members::<T>::put(new_members);
-
+			let genesis_members: BoundedVec<T::AccountId, T::MaxMembers> =
+				self.members.clone().try_into().expect("Too many genesis members");
+			Members::<T>::set(genesis_members);
 		}
 	}
 

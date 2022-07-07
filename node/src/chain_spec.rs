@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, CollectiveConfig, GenesisConfig, GrandpaConfig,
+	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, AbilityConfig,
 	Signature, SudoConfig, SystemConfig, WASM_BINARY,
 };
 use sc_service::ChainType;
