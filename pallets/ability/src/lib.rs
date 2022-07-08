@@ -259,7 +259,7 @@ pub mod pallet {
 
 			// unwrapped version
 			let mut vs_unwrapped = vstatus.clone().unwrap_or_default();
-
+ 
 			if vstatus != None {
 				// make sure there is no duplicate votes
 				let _dv = vs_unwrapped
