@@ -252,8 +252,13 @@ pub mod pallet {
 				app_cid.clone().try_into().map_err(|()| Error::<T>::AppCIDOverflow)?;
 
 			let members = Members::<T>::get();
-			let _location =
-				members.binary_search(&verifier).ok().ok_or(Error::<T>::NotAVerifier)?;
+			// let _location =
+			// 	members.binary_search(&verifier).ok().ok_or(Error::<T>::NotAVerifier)?;
+
+			if !members.to_vec().contains(&verifier) {
+				// throw error
+				ensure!(true == false, Error::<T>::NotAVerifier);
+			}
 
 			let vstatus = AppVQueue::<T>::get(&cid);
 
@@ -358,7 +363,7 @@ pub mod pallet {
 				let app_new = app.unwrap();
 
 				// insert into ability pool, make sure it hasn't been added before
-				if let None = AbilityPool::<T>::get(cid) {
+				if let Some(_appv) = AbilityPool::<T>::get(cid) {
 					// throw error
 					ensure!(true == false, Error::<T>::AppExistsInPool)
 				}
