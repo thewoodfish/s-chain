@@ -312,6 +312,8 @@ parameter_types! {
 	pub const MaxAppCIDLength: u32 = 128;
 	pub const MaxPermissionsLength: u32 = 128;
 	pub const MaxMembers: u32 = 3;
+	pub const MaxNetworkApps: u32 = 1000;
+	pub const MaxAppDownloads: u32 = 1000;
 }
 
 impl pallet_ability::Config for Runtime {
@@ -323,6 +325,8 @@ impl pallet_ability::Config for Runtime {
 	// 	pallet_collective::EnsureProportionAtLeast<AccountId, CouncilCollective, 2, 3>;
 	type MaxMembers = MaxMembers;
 	type MembershipInitialized = TechnicalCommittee;
+	type MaxNetworkApps = MaxNetworkApps;
+	type MaxAppDownloads = MaxAppDownloads;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

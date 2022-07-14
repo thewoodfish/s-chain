@@ -21,8 +21,19 @@ pub mod pallet {
 	#[codec(mel_bound())]
 	pub struct SamApp<T: Config> {
 		pub name: BoundedVec<u8, T::MaxAppNameLength>,
+		pub cid: BoundedVec<u8, T::MaxAppCIDLength>,
 		pub developer: T::AccountId,
 		pub permissions: BoundedVec<u8, T::MaxPermissionsLength>,
+		pub downloads: u64
+	}
+
+
+	#[derive(Default, Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[scale_info(skip_type_params(T))]
+	#[codec(mel_bound())]
+	pub struct Permissions<T: Config> {
+		pub account: T::AccountId,
+		pub allow: bool
 	}
 
 	#[derive(Default, Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -58,6 +69,12 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type MaxMembers: Get<u32>;
+
+		#[pallet::constant]
+		type MaxNetworkApps: Get<u32>;
+
+		#[pallet::constant]
+		type MaxAppDownloads: Get<u32>;
 	}
 
 	#[pallet::pallet]
@@ -75,6 +92,10 @@ pub mod pallet {
 		AppReviewConcluded(Vec<u8>, u32, u32),
 		/// app has been added to the ability pool
 		AddedToAbilityPool(Vec<u8>),
+		/// app successfully downloaded
+		AppDownloadSuccessful(Vec<u8>, T::AccountId, u64),
+		/// app download record modified
+		DownloadRecordModified(T::AccountId, Vec<u8>)
 	}
 
 	/// The current membership, stored as an ordered Vec.
@@ -111,23 +132,16 @@ pub mod pallet {
 	#[pallet::getter(fn app_count)]
 	pub type AppsCount<T: Config> = StorageValue<_, u32>;
 
-	// 	fn array_to_vec<T: Config>(arr: &[T::AccountId]) -> Vec<T::AccountId> {
-	// 		let mut vector = Vec::new();
-	// 		for i in arr.iter() {
-	// 			vector.push(*i);
-	// 		}
+	/// list containing all the apps passed by the network
+	#[pallet::storage]
+	#[pallet::getter(fn app_list)]
+	pub type AppsList<T: Config> = StorageValue<_, BoundedVec<SamApp<T>, T::MaxNetworkApps>>;
 
-	// 		vector
-	//    }
-
-	// impl<T: Config> InitializeMembers<T::AccountId> for Pallet<T> {
-	// 	fn initialize_members(mbs: &[T::AccountId]) {
-	// 		if !members.is_empty() {
-	// 			assert!(Members::<T>::get().is_empty(), "Members are already initialized!");
-	// 			Members::<T>::put(members);
-	// 		}
-	// 	}
-	// }
+	/// apps mapped to the users that downloads them
+	#[pallet::storage]
+	#[pallet::getter(fn downloads)]
+	pub type Downloads<T: Config> = 
+		StorageMap<_, Twox64Concat, BoundedVec<u8, T::MaxAppCIDLength>, BoundedVec<Permissions<T>, T::MaxAppDownloads>>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -194,6 +208,15 @@ pub mod pallet {
 
 		/// Too many members
 		MembersOverflow,
+
+		/// Maximum number of apps allowed reached
+		MaxNetworkAppsBoundaryReached,
+
+		/// Maximum number of app dowload reached
+		MaxAppsDownloadReached,
+
+		/// A record was not found
+		RecordNotFound
 	}
 
 	#[pallet::call]
@@ -306,9 +329,61 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+
+		// modify app permissions for a user
+		#[pallet::weight(1000)]
+		pub fn change_permissions(origin: OriginFor<T>, app_cid: Vec<u8>, allow: bool) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+
+			// record the addition of the app to the users state
+			let cid: BoundedVec<_, T::MaxAppCIDLength> =
+					app_cid.clone().try_into().map_err(|()| Error::<T>::AppCIDOverflow)?;
+
+			Self::modify_download_record(&sender, &cid, allow);
+
+			Ok(())
+		}
+
+		#[pallet::weight(1000)]
+		pub fn download_app(origin: OriginFor<T>, app_cid: Vec<u8>) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+
+			// record the addition of the app to the users state
+			let cid: BoundedVec<_, T::MaxAppCIDLength> =
+					app_cid.clone().try_into().map_err(|()| Error::<T>::AppCIDOverflow)?;
+
+			// first check if the record exists
+			if let None = Downloads::<T>::get(&cid) {
+				// create new record
+				let empty: Vec<Permissions<T>> = vec![];
+				let bounded_empty: BoundedVec<_, T::MaxAppDownloads> = 
+					empty.try_into().map_err(|()| Error::<T>::MaxAppsDownloadReached)?;
+
+				Downloads::<T>::insert(cid.clone(), bounded_empty);
+			}
+
+			Self::modify_download_record(&sender, &cid, false)?;
+
+			let mut app = AbilityPool::<T>::get(&cid).unwrap();
+			let download_count = app.downloads.clone();
+			app.downloads += 1;
+			AbilityPool::<T>::try_mutate(&cid, |app_x| {
+				if true {
+					*app_x = Some(app);
+					return Ok(0);
+				}
+
+				Err(0)
+			});
+
+			Self::deposit_event(Event::AppDownloadSuccessful(app_cid, sender, download_count));
+
+			Ok(())
+		}
 	}
 
-	/// helper functions
+	/// helper functions;
 	impl<T: Config> Pallet<T> {
 		// upload app for verification in the temporary pool
 		pub fn add_ability(
@@ -319,8 +394,10 @@ pub mod pallet {
 		) {
 			let app: SamApp<T> = SamApp {
 				name: name.clone(),
+				cid: cid.clone(),
 				developer: user_id.clone(),
 				permissions: perm.clone(),
+				downloads: 0
 			};
 
 			// insert into temporary pool
@@ -346,6 +423,7 @@ pub mod pallet {
 				// select app from tempPool
 				let app = TempPool::<T>::get(cid).ok_or(<Error<T>>::AppDoesNotExist);
 				let app_new = app.unwrap();
+				let app_new1 = TempPool::<T>::get(cid).ok_or(<Error<T>>::AppDoesNotExist).unwrap();
 
 				// insert into ability pool, make sure it hasn't been added before
 				if let Some(_appv) = AbilityPool::<T>::get(cid) {
@@ -362,6 +440,12 @@ pub mod pallet {
 					None => AppsCount::<T>::put(1),
 				}
 
+				// add app to apps list
+				let mut list = AppsList::<T>::get().unwrap_or_default();
+				list.try_push(app_new1).map_err(|()| Error::<T>::MaxNetworkAppsBoundaryReached)?;
+
+				AppsList::<T>::put(list);
+
 				Self::deposit_event(Event::AddedToAbilityPool(cid.to_vec().clone()));
 			}
 
@@ -375,6 +459,36 @@ pub mod pallet {
 			AppVQueue::<T>::remove(cid);
 
 			Self::deposit_event(Event::AppReviewConcluded(cid.to_vec().clone(), ayes, nays));
+
+			Ok(())
+		}
+
+		pub fn modify_download_record(
+			sender: &T::AccountId,
+			cid: &BoundedVec<u8, T::MaxAppCIDLength>,
+			allow: bool
+		) -> Result<(), Error<T>> {
+			
+			let dp: Permissions<T> = Permissions {
+				account: sender.clone(),
+				allow
+			};
+
+			// now just select the record
+			let app_d = Downloads::<T>::get(&cid);
+			let mut downloads = app_d.unwrap_or_default();
+
+			downloads.try_push(dp).map_err(|_| Error::<T>::MaxAppsDownloadReached)?;
+			Downloads::<T>::try_mutate(&cid, |dl| {
+				if true {
+					*dl = Some(downloads);
+					return Ok(0);
+				}
+
+				Err(0)
+			});
+
+			Self::deposit_event(Event::DownloadRecordModified(sender.clone(), cid.to_vec().clone()));
 
 			Ok(())
 		}
